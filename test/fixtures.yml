@@ -472,6 +472,11 @@ payway:
   password:
   pem:
 
+# Working credentials, no need to replace
+pelecard:
+  some_credential: SOMECREDENTIAL
+  another_credential: ANOTHERCREDENTIAL
+
 pin:
   api_key: "I_mo9BUUUXIwXF-avcs3LA"
 
