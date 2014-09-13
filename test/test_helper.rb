@@ -4,6 +4,7 @@ $:.unshift File.expand_path('../../lib', __FILE__)
 begin
   require 'rubygems'
   require 'bundler'
+  require 'pry'
   Bundler.setup
 rescue LoadError => e
   puts "Error loading bundler (#{e.message}): \"gem install bundler\" for bundler support."
