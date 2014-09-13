@@ -12,13 +12,21 @@ module ActiveMerchant #:nodoc:
         "authonly" => "AuthrizeCreditCard",
         "refund" => "DebitRegularType"
       }
+      RETURN_CODE_SUCCESS = "000"
+      RETURN_CODES = {
+        RETURN_CODE_SUCCESS => "success",
+        "033" => "invalid_number",
+        "039" => "invalid_number",
+        "036" => "card_expired"
+      }
 
       self.test_url = 'https://ws101.pelecard.biz/webservices.asmx'
       self.live_url = 'https://ws101.pelecard.biz/webservices.asmx'
 
       self.supported_countries = ['IL']
-      self.default_currency = 'ILS'
+      self.default_currency = '1' # ILS
       self.supported_cardtypes = [:visa, :master, :american_express]
+      self.money_format = :cents
 
       self.homepage_url = 'http://www.pelecard.com'
       self.display_name = 'Pelecard Gateway'
@@ -92,14 +100,40 @@ module ActiveMerchant #:nodoc:
         end
       end
 
+      #
+      # Parses the response from the pelecard service
+      # specifications can be found at: 
+      # http://mabat.net/572/documents/Iframe%20mobile%20-%20Payment/Iframe_CSS_Friendly_-_Programmer_Manual_-_English.pdf
+      #
+      # @param [<string>] body <response from server>
+      #
+      # @return [<hash>] <parsed response>
+      # 
       def parse(body)
         binding.pry
-        {}
+        raw = REXML::Document.new(body).root.text
+        response = {}
+        response[:response_code] = raw[0..2]
+        response[:token_or_ccn] = raw[4..22]
+        response[:card_brand] = raw[23]
+        response[:credit_firm] = raw[24]
+        response[:J] = raw[28]
+        response[:exp_MMYY] = raw[29..32]
+        response[:id_response] = raw[33]
+        response[:cvv_response] = raw[34]
+        response[:amount_cents] = raw[35..42]
+        response[:credit_issuer] = raw[60]
+        response
       end
 
       def commit(action, parameters)
+
         url = build_url(action)
-        response = parse(ssl_post(url, post_data(action, parameters)))
+
+        # Create data for post
+        data = post_data(action, parameters)
+        binding.pry
+        response = parse(ssl_post(url, data))
         
         Response.new(
           success_from(response),
@@ -111,9 +145,18 @@ module ActiveMerchant #:nodoc:
       end
 
       def success_from(response)
+        response[:response_code] == RETURN_CODE_SUCCESS
       end
 
       def message_from(response)
+        code = response[:response_code]
+        message = "Irregular response code (#{code})"
+
+        if RETURN_CODES.include?(code)
+          message = RETURN_CODES[code]
+        end
+
+        message
       end
 
       def authorization_from(response)
