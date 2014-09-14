@@ -9,22 +9,27 @@ class PelecardTest < Test::Unit::TestCase
     )
 
     @credit_card = credit_card
+    @token = '1477499800'
     @amount = 100
 
     @options = {
-      order_id: '1',
-      billing_address: address,
-      description: 'Store Purchase'
+      id: "1234567"
     }
   end
 
-  def test_successful_purchase
+  def test_successful_purchase_card
     @gateway.expects(:ssl_post).returns(successful_purchase_response)
 
     response = @gateway.purchase(@amount, @credit_card, @options)
     assert_success response
+    assert response.test?
+  end
 
-    assert_equal 'REPLACE', response.authorization
+  def test_successful_purchase_token
+    @gateway.expects(:ssl_post).returns(successful_purchase_token_response)
+
+    response = @gateway.purchase(@amount, @token, @options)
+    assert_success response
     assert response.test?
   end
 
@@ -35,8 +40,13 @@ class PelecardTest < Test::Unit::TestCase
   #   assert_failure response
   # end
 
-  # def test_successful_authorize
-  # end
+  def test_successful_authorize
+    @gateway.expects(:ssl_post).returns(successful_aut_response)
+
+    response = @gateway.purchase(@amount, @credit_card, @options)
+    assert_success response
+    assert response.test?
+  end
 
   # def test_failed_authorize
   # end
@@ -70,25 +80,22 @@ class PelecardTest < Test::Unit::TestCase
 
   # private
 
-  # def successful_purchase_response
-  #   %(
-  #     Easy to capture by setting the DEBUG_ACTIVE_MERCHANT environment variable
-  #     to "true" when running remote tests:
+  def successful_purchase_response
+    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<string xmlns=\"https://ws101.pelecard.biz/\">0000000532610035128471011000409153300000100        000000001011 150  0000000000000000000000000073001062 \xC6\x92\xCB\x9C\xE2\x80\x94\xCB\x9C\xCB\x86\xE2\x80\x98\xC2\x8E/\xE2\x80\x9E\xC2\x90\xE2\x80\xB0\xCB\x86\xC2\x8C\xE2\x80\x9D0                   \r\n</string>"
+  end
 
-  #     $ DEBUG_ACTIVE_MERCHANT=true ruby -Itest \
-  #       test/remote/gateways/remote_pelecard_test.rb \
-  #       -n test_successful_purchase
-  #   )
-  # end
+  def successful_purchase_token_response
+    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<string xmlns=\"https://ws101.pelecard.biz/\">0000000532610******471011000404173000000100        000000001011 150  0000000000000000000000000073001083 \xC6\x92\xCB\x9C\xE2\x80\x94\xCB\x9C\xCB\x86\xE2\x80\x98\xC2\x8E/\xE2\x80\x9E\xC2\x90\xE2\x80\xB0\xCB\x86\xC2\x8C\xE2\x80\x9D0                   \r\n</string>"
+  end
 
   # def failed_purchase_response
   # end
 
-  # def successful_authorize_response
-  # end
+  def successful_authorize_response
+  end
 
-  # def failed_authorize_response
-  # end
+  def failed_authorize_response
+  end
 
   # def successful_capture_response
   # end
@@ -109,6 +116,6 @@ class PelecardTest < Test::Unit::TestCase
   # end
 
   def check_uri_build
-    
+
   end
 end

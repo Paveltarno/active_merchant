@@ -10,14 +10,27 @@ module ActiveMerchant #:nodoc:
       ACTIONS_MAP = {
         "sale" => "DebitRegularType",
         "authonly" => "AuthrizeCreditCard",
-        "refund" => "DebitRegularType"
+        "refund" => "DebitRegularType",
+        "check_login" => "GetRetNum"
       }
       RETURN_CODE_SUCCESS = "000"
       RETURN_CODES = {
         RETURN_CODE_SUCCESS => "success",
-        "033" => "invalid_number",
-        "039" => "invalid_number",
-        "036" => "card_expired"
+        "003" => "contact credit company",
+        "033" => "invalid card number",
+        "039" => "invalid card number",
+        "036" => "card expired",
+        "004" => "card declined",
+        "005" => "fake card",
+        "006" => "invalid id or cvv",
+        "014" => "unsupported card type",
+        "044" => "terminal not allowed to authorize only (J5)",
+        "065" => "invalid currency",
+        "434" => "invlaid terminal number",
+        "501" => "invalid userName/password combination",
+        "502" => "password expired",
+        "503" => "terminal user is locked",
+        "506" => "invalid token number"
       }
 
       self.test_url = 'https://ws101.pelecard.biz/webservices.asmx'
@@ -39,44 +52,73 @@ module ActiveMerchant #:nodoc:
       end
 
       def purchase(money, payment, options={})
-        requires!(options, :id)
-        post = {}
-        add_invoice(post, money, options)
-        add_payment(post, payment)
-        add_customer_data(post, options)
-
-        commit('sale', post)
+        exec_action(money, payment, "sale", options)
       end
 
       def authorize(money, payment, options={})
-        post = {}
-        add_invoice(post, money, options)
-        add_payment(post, payment)
-        add_customer_data(post, options)
-
-        commit('authonly', post)
+        exec_action(money, payment, "authonly", options)
       end
+
+      def refund(money, payment, options={})
+        options[:refund] = true
+        exec_action(money, payment, "sale", options)
+      end
+
+      #
+      # Checks the credentials using pelecards service
+      #
+      #
+      # @return [<type>] <description>
+      # 
+      def check_login
+        action = "check_login"
+        url = build_url(action)
+
+        # Create data for post
+        data = post_data(action)
+
+        # The raw should be the terminal number on success
+        response = parse(ssl_post(url, data)) { |raw| { code: raw[0..6] } }
+        success = response[:code] == @options[:terminal_no] ? true : false
+        Response.new(
+          success,
+          "",
+          response,
+          authorization: "",
+          test: test?
+        )
+      end
+
+      # TODO: Clean up all the commented out
 
       # def capture(money, authorization, options={})
       #   commit('capture', post)
-      # end
-
-      # def refund(money, authorization, options={})
-      #   commit('refund', post)
       # end
 
       # def void(authorization, options={})
       #   commit('void', post)
       # end
 
-      def verify(credit_card, options={})
-        MultiResponse.run(:use_first_response) do |r|
-          r.process { authorize(100, credit_card, options) }
-          r.process(:ignore_result) { void(r.authorization, options) }
-        end
-      end
+      # def verify(credit_card, options={})
+      #   MultiResponse.run(:use_first_response) do |r|
+      #     r.process { authorize(100, credit_card, options) }
+      #     r.process(:ignore_result) { void(r.authorization, options) }
+      #   end
+      # end
 
       private
+
+      # For keeping our code DRY
+      def exec_action(money, payment, action, options={})
+        raise ArgumentError, "Money should be a positive integer in cents" if money < 0 
+        requires!(options, :id)
+        post = {}
+        add_invoice(post, money, options)
+        add_payment(post, payment)
+        add_customer_data(post, options)
+
+        commit(action, post)
+      end
 
       def add_customer_data(post, options)
         post[:id] = options[:id]
@@ -84,7 +126,8 @@ module ActiveMerchant #:nodoc:
 
       # Money is in cents
       def add_invoice(post, money, options)
-        post[:total] = amount(money)
+
+        post[:total] = amount(money, options.include?(:refund))
         post[:currency] = (options[:currency] || currency(money))
       end
 
@@ -104,35 +147,39 @@ module ActiveMerchant #:nodoc:
       # Parses the response from the pelecard service
       # specifications can be found at: 
       # http://mabat.net/572/documents/Iframe%20mobile%20-%20Payment/Iframe_CSS_Friendly_-_Programmer_Manual_-_English.pdf
-      #
+      # 
       # @param [<string>] body <response from server>
+      # @param [<block>] block <optional custom parse>
       #
       # @return [<hash>] <parsed response>
       # 
-      def parse(body)
-        binding.pry
+      def parse(body, &block)
         raw = REXML::Document.new(body).root.text
-        response = {}
-        response[:response_code] = raw[0..2]
-        response[:token_or_ccn] = raw[4..22]
-        response[:card_brand] = raw[23]
-        response[:credit_firm] = raw[24]
-        response[:J] = raw[28]
-        response[:exp_MMYY] = raw[29..32]
-        response[:id_response] = raw[33]
-        response[:cvv_response] = raw[34]
-        response[:amount_cents] = raw[35..42]
-        response[:credit_issuer] = raw[60]
-        response
+
+        if block_given?
+          block.call(raw)
+        else
+          response = {}
+          response[:response_code] = raw[0..2]
+          response[:card_number] = raw[4..22]
+          response[:card_brand] = raw[23]
+          response[:credit_firm] = raw[24]
+          response[:J] = raw[28]
+          response[:exp_MMYY] = raw[29..32]
+          response[:id_response] = raw[33]
+          response[:cvv_response] = raw[34]
+          response[:amount_cents] = raw[35..42]
+          response[:credit_issuer] = raw[60]
+          response[:authorization_number] = raw[70..76]
+          response
+        end
       end
 
       def commit(action, parameters)
-
         url = build_url(action)
 
         # Create data for post
         data = post_data(action, parameters)
-        binding.pry
         response = parse(ssl_post(url, data))
         
         Response.new(
@@ -160,6 +207,9 @@ module ActiveMerchant #:nodoc:
       end
 
       def authorization_from(response)
+        auth_fields = [:authorization_number]
+        auth = response.select{ |k, v| auth_fields.include?(k) }
+        auth
       end
 
       # Pelecard requires that all parameters will be sent
@@ -192,8 +242,10 @@ module ActiveMerchant #:nodoc:
           when "sale"
             keys = [:creditCard, :creditCardDateMmyy, :token, :total, :currency, :cvv2, :id, :authNum,
               :parmx]
-          when "authorize"
+          when "authonly"
             keys = [:creditCard, :creditCardDateMmyy, :token, :total, :currency, :cvv2, :id, :parmx]
+          when "check_login"
+            keys = []
         else
           raise ArgumentError, "Action: #{action} is not supported"
         end
@@ -222,6 +274,36 @@ module ActiveMerchant #:nodoc:
         base_url = (test? ? test_url : live_url)
         raise ArgumentError, "Action: #{action} cannot be mapped to URI" unless ACTIONS_MAP.include?(action)
         "#{base_url}/#{ACTIONS_MAP[action]}"
+      end
+
+      #
+      # Overloads the regular amount
+      #
+      def amount(money, negative = false)
+        return nil if money.nil?
+        cents = if money.respond_to?(:cents)
+
+          # TODO: Check with new version of gateway
+          ActiveMerchant.deprecated "Support for Money objects is deprecated and will be removed from a future release of ActiveMerchant. Please use an Integer value in cents"
+          money.cents
+        else
+          money
+        end
+
+        if negative
+          # Negate it
+          cents = -cents
+        end
+
+        if money.is_a?(String)
+          raise ArgumentError, 'money amount must be an Integer in cents.'
+        end
+
+        if self.money_format == :cents
+          cents.to_s
+        else
+          sprintf("%.2f", cents.to_f / 100)
+        end
       end
 
     end
