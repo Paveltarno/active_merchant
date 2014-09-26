@@ -124,6 +124,17 @@ class RemotePelecardTest < Test::Unit::TestCase
     assert_failure response
   end
 
+  def test_successful_get_error_message
+    response = @gateway.get_error_message("000")
+    assert_success response
+  end
+
+  def test_failed_get_error_message
+    bad_gateway = PelecardGateway.new(login: "Bogus", password: "Bogus", terminal_no: "1234567")
+    response = bad_gateway.get_error_message("000")
+    assert_failure response
+  end
+
   # def test_successful_void
   #   auth = @gateway.authorize(@amount, @credit_card, @options)
   #   assert_success auth

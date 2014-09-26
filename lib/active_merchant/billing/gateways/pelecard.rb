@@ -11,7 +11,8 @@ module ActiveMerchant #:nodoc:
         "sale" => "DebitRegularType",
         "authonly" => "AuthrizeCreditCard",
         "refund" => "DebitRegularType",
-        "check_login" => "GetRetNum"
+        "check_login" => "GetRetNum",
+        "check_error" => "CheckError"
       }
       RETURN_CODE_SUCCESS = "000"
       RETURN_CODES = {
@@ -65,6 +66,32 @@ module ActiveMerchant #:nodoc:
       end
 
       #
+      # Get pelecards error message for the given code
+      #
+      # @param [String] error_code Erro code
+      #
+      # @return [String] Error message
+      # 
+      def get_error_message(error_code)
+        action = "check_error"
+        url = build_url(action)
+
+        # Create data for post
+        data = post_data(action, { code: error_code })
+        
+        # The result should be a test message or and error code
+        response = parse(ssl_post(url, data)) { |raw| { message: raw } }
+        success = response[:message].length > 3
+        Response.new(
+          success,
+          "",
+          response,
+          authorization: "",
+          test: test?
+        )
+      end
+
+      #
       # Checks the credentials using pelecards service
       #
       #
@@ -87,6 +114,44 @@ module ActiveMerchant #:nodoc:
           authorization: "",
           test: test?
         )
+      end
+
+      def parse(body, &block)
+        raw = REXML::Document.new(body).root.text
+
+        parse_int_ot(raw, &block)
+      end
+
+      #
+      # Parses the response from the pelecard service
+      # specifications can be found at: 
+      # http://mabat.net/572/documents/Iframe%20mobile%20-%20Payment/Iframe_CSS_Friendly_-_Programmer_Manual_-_English.pdf
+      # 
+      # @param [<string>] body <response from server>
+      # @param [<block>] block <optional custom parse>
+      #
+      # @return [<hash>] <parsed response>
+      # 
+      def parse_int_ot(int_ot, &block)
+        if block_given?
+          block.call(int_ot)
+        else
+          response = {}
+          response[:response_code] = int_ot[0..2]
+          response[:card_number] = int_ot[4..22]
+          response[:last_digits] = int_ot[19..22]
+          response[:card_brand] = int_ot[23]
+          response[:credit_firm] = int_ot[24]
+          response[:J] = int_ot[28]
+          response[:exp_MMYY] = int_ot[29..32]
+          response[:id_response] = int_ot[33]
+          response[:cvv_response] = int_ot[34]
+          response[:amount_cents] = int_ot[35..42]
+          response[:credit_issuer] = int_ot[60]
+          response[:authorization_number] = int_ot[70..76]
+          response[:parmx] = int_ot[119..137]
+          response
+        end
       end
 
       # TODO: Clean up all the commented out
@@ -140,38 +205,6 @@ module ActiveMerchant #:nodoc:
           post[:creditCard] = payment.number
           post[:creditCardDateMmyy] = expdate(payment)
           post[:cvv2] = payment.verification_value
-        end
-      end
-
-      #
-      # Parses the response from the pelecard service
-      # specifications can be found at: 
-      # http://mabat.net/572/documents/Iframe%20mobile%20-%20Payment/Iframe_CSS_Friendly_-_Programmer_Manual_-_English.pdf
-      # 
-      # @param [<string>] body <response from server>
-      # @param [<block>] block <optional custom parse>
-      #
-      # @return [<hash>] <parsed response>
-      # 
-      def parse(body, &block)
-        raw = REXML::Document.new(body).root.text
-
-        if block_given?
-          block.call(raw)
-        else
-          response = {}
-          response[:response_code] = raw[0..2]
-          response[:card_number] = raw[4..22]
-          response[:card_brand] = raw[23]
-          response[:credit_firm] = raw[24]
-          response[:J] = raw[28]
-          response[:exp_MMYY] = raw[29..32]
-          response[:id_response] = raw[33]
-          response[:cvv_response] = raw[34]
-          response[:amount_cents] = raw[35..42]
-          response[:credit_issuer] = raw[60]
-          response[:authorization_number] = raw[70..76]
-          response
         end
       end
 
@@ -244,6 +277,8 @@ module ActiveMerchant #:nodoc:
               :parmx]
           when "authonly"
             keys = [:creditCard, :creditCardDateMmyy, :token, :total, :currency, :cvv2, :id, :parmx]
+          when "check_error"
+            keys = [:code]
           when "check_login"
             keys = []
         else
