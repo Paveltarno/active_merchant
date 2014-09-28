@@ -78,13 +78,13 @@ module ActiveMerchant #:nodoc:
 
         # Create data for post
         data = post_data(action, { code: error_code })
-        
+
         # The result should be a test message or and error code
         response = parse(ssl_post(url, data)) { |raw| { message: raw } }
         success = response[:message].length > 3
         Response.new(
           success,
-          "",
+          response[:message],
           response,
           authorization: "",
           test: test?
