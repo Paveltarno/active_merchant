@@ -22,25 +22,21 @@ class RemotePelecardTest < Test::Unit::TestCase
   def test_successful_purchase_card
     response = @gateway.purchase(@amount, @credit_card, @options)
     assert_success response
-    assert_equal 'success', response.message
   end
 
   def test_successful_purchase_token
     response = @gateway.purchase(@amount, @token, @options)
     assert_success response
-    assert_equal 'success', response.message
   end
 
   def test_failed_purchase_card
     response = @gateway.purchase(@amount, @declined_card, @options)
     assert_failure response
-    assert_equal 'invalid card number', response.message
   end
 
   def test_failed_purchase_token
     response = @gateway.purchase(@amount, @declined_token, @options)
     assert_failure response
-    assert_equal 'invalid token number', response.message
   end
 
   def test_successful_authorize_card

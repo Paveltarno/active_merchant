@@ -1,11 +1,16 @@
+# !!!This is a gateway for testing only!!!
+# TODO : Remove if not needed
 module ActiveMerchant #:nodoc:
   module Billing #:nodoc:
 
     # Gateway adapter for Pelecard
     # for every function, if a token parameter is sent through
     # the payment parameter can be a credit card or a token
-    class PelecardGateway < Gateway
+    class PelecardBogusGateway < Gateway
       # Consts
+      STUB_PELE_FAIL = "0030000455744******590722000501170000000000 000000001011 150 52000000000000000000000000097001065 „† „†‰…0"
+      STUB_PELE_SUCCESS = "0000000455744******590722000501170000000000 000000001011 150 52000000000000000000000000097001065 „† „†‰…0"
+
       DEFAULT_SHOP_NO = '1'
       ACTIONS_MAP = {
         "sale" => "DebitRegularType",
@@ -35,7 +40,6 @@ module ActiveMerchant #:nodoc:
       }
 
       self.test_url = 'https://ws101.pelecard.biz/webservices.asmx'
-      #self.test_url = 'https://ws101.pelecsfhshard.biz/webservices.asmx'
       self.live_url = 'https://ws101.pelecard.biz/webservices.asmx'
 
       self.supported_countries = ['IL']
@@ -45,6 +49,10 @@ module ActiveMerchant #:nodoc:
 
       self.homepage_url = 'http://www.pelecard.com'
       self.display_name = 'Pelecard Gateway'
+
+      def test?
+        true
+      end
 
       # TODO: The amount should be in cents
       def initialize(options={})
@@ -119,9 +127,7 @@ module ActiveMerchant #:nodoc:
       end
 
       def parse(body, &block)
-        raw = REXML::Document.new(body).root.text
-
-        parse_int_ot(raw, &block)
+        parse_int_ot(body, &block)
       end
 
       #
@@ -215,7 +221,8 @@ module ActiveMerchant #:nodoc:
 
         # Create data for post
         data = post_data(action, parameters)
-        response = parse(ssl_post(url, data))
+        binding.pry
+        response = parse(post_stub(action, parameters))
         
         Response.new(
           success_from(response),
@@ -224,6 +231,14 @@ module ActiveMerchant #:nodoc:
           authorization: authorization_from(response),
           test: test?
         )
+      end
+
+      def post_stub(action, parameters)
+        fail = parameters[:stub_fail]
+        auth_code = Random.new.rand(1000000..9999999).to_s
+        int_ot = fail ? STUB_PELE_FAIL : STUB_PELE_SUCCESS
+        int_ot[70..76] = auth_code
+        return int_ot
       end
 
       def success_from(response)
