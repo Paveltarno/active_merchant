@@ -131,13 +131,16 @@ class RemotePelecardTest < Test::Unit::TestCase
     assert_failure response
   end
 
-  # def test_successful_void
-  #   auth = @gateway.authorize(@amount, @credit_card, @options)
-  #   assert_success auth
+  def test_successful_capture_token
+    @options[:token] = @token
+    authNum = "1234567"
+    @options[:parmx] = "test"
 
-  #   assert void = @gateway.void(auth.authorization)
-  #   assert_success void
-  # end
+    response = @gateway.capture(@amount, authNum, @options)
+    assert_success response
+    assert_equal response.params["parmx"].strip, @options[:parmx]
+    assert_equal response.authorization, authNum
+  end
 
   # def test_failed_void
   #   response = @gateway.void('')

@@ -2,11 +2,12 @@ module ActiveMerchant #:nodoc:
   module Billing #:nodoc:
 
     # Gateway adapter for Pelecard
-    # for every function, if a token parameter is sent through
-    # the payment parameter can be a credit card or a token
+    # for every function, if a payment parameter is sent through
+    # its parameter can be a credit card object or a token strubg
     class PelecardGateway < Gateway
       # Consts
       DEFAULT_SHOP_NO = '1'
+      PARMX_MAX_CHAR_NUM = 19
       ACTIONS_MAP = {
         "sale" => "DebitRegularType",
         "authonly" => "AuthrizeCreditCard",
@@ -34,8 +35,8 @@ module ActiveMerchant #:nodoc:
         "506" => "invalid token number"
       }
 
+      # D.M
       self.test_url = 'https://ws101.pelecard.biz/webservices.asmx'
-      #self.test_url = 'https://ws101.pelecsfhshard.biz/webservices.asmx'
       self.live_url = 'https://ws101.pelecard.biz/webservices.asmx'
 
       self.supported_countries = ['IL']
@@ -62,6 +63,12 @@ module ActiveMerchant #:nodoc:
         exec_action(money, payment, "authonly", options)
       end
 
+      def capture(money, authorization, options={})
+        requires!(options, :token)
+        options[:authNum] ||= authorization
+        exec_action(money, options[:token], "sale", options)
+      end
+
       def refund(money, payment, options={})
         options[:refund] = true
         exec_action(money, payment, "sale", options)
@@ -70,7 +77,7 @@ module ActiveMerchant #:nodoc:
       #
       # Get pelecards error message for the given code
       #
-      # @param [String] error_code Erro code
+      # @param [String] error_code Error code
       #
       # @return [String] Error message
       # 
@@ -158,10 +165,6 @@ module ActiveMerchant #:nodoc:
 
       # TODO: Clean up all the commented out
 
-      # def capture(money, authorization, options={})
-      #   commit('capture', post)
-      # end
-
       # def void(authorization, options={})
       #   commit('void', post)
       # end
@@ -178,11 +181,13 @@ module ActiveMerchant #:nodoc:
       # For keeping our code DRY
       def exec_action(money, payment, action, options={})
         raise ArgumentError, "Money should be a positive integer in cents" if money < 0 
+        raise ArgumentError, "Payment should be a token string or a CreditCard object" if !payment
         requires!(options, :id)
         post = {}
         add_invoice(post, money, options)
         add_payment(post, payment)
         add_customer_data(post, options)
+        add_parmx(post, options)
 
         commit(action, post)
       end
@@ -193,9 +198,9 @@ module ActiveMerchant #:nodoc:
 
       # Money is in cents
       def add_invoice(post, money, options)
-
         post[:total] = amount(money, options.include?(:refund))
         post[:currency] = (options[:currency] || currency(money))
+        post[:authNum] ||= options[:authNum]
       end
 
       # Adds token data or credit card
@@ -208,6 +213,10 @@ module ActiveMerchant #:nodoc:
           post[:creditCardDateMmyy] = expdate(payment)
           post[:cvv2] = payment.verification_value
         end
+      end
+
+      def add_parmx(post, options)
+        post[:parmx] ||= options[:parmx]
       end
 
       def commit(action, parameters)
