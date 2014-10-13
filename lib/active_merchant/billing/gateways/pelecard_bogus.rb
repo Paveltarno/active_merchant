@@ -19,6 +19,10 @@ module ActiveMerchant #:nodoc:
       end
 
       def parse(body, &block)
+        begin
+          body = REXML::Document.new(body).root.text
+        rescue Exception => e
+        end
         parse_int_ot(body, &block)
       end
 
